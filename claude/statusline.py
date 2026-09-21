@@ -2,7 +2,7 @@
 """Claude Code status line — rounded pill segments (Nerd Font required, e.g. MesloLGS NF).
 
 Default layout (see LINES):
-  1. session settings : (model) (agent) (git) (dir)
+  1. session settings : (model) (effort) (agent) (git) (dir)
   2. session numbers  : (ctx %) (diff) (time) (cost)
   3. account usage    : (usage) (5h) (7d) (per-model weekly, e.g. Fable) (ver)
 
@@ -17,16 +17,16 @@ from datetime import datetime, timezone
 SEG_STYLE   = "pill"      # "pill" (rounded) | "arrow" (powerline) | "lean" (no background)
 BOLD        = False       # bold values (model name, percentages, cost)
 # Each inner list is one status line. Available keys:
-#   session : model agent git dir ctx diff time cost vim
+#   session : model effort agent git dir ctx diff time cost vim
 #   account : header 5h 7d scoped ver      ("scoped" = per-model weekly limits, e.g. Fable)
 LINES = [
-    ["model", "agent", "dir", "git", "vim"],      # session settings  (repo → branch)
+    ["model", "effort", "agent", "dir", "git", "vim"],   # session settings  (repo → branch)
     ["ctx", "cost", "time"],                      # session numbers
     ["5h", "7d", "scoped"],                       # account-wide usage
 ]
 # fuller variant:  [["model","agent","git","dir","vim"], ["ctx","diff","time","cost"], ["header","5h","7d","scoped","ver"]]
 ICONS       = False       # Nerd Font icon in front of each pill
-SHOW_EFFORT = False       # "xhi" etc. after the model name
+SHOW_EFFORT = True        # effort level ("xhigh" …) as its own pill next to the model
 LINE2_HEADER = ""         # label pill for the account-usage group ("" to hide)
 FETCH_USAGE = True
 USAGE_TTL   = 300         # seconds between background usage fetches
@@ -70,7 +70,10 @@ C = dict(model_bg=60, model_fg=253, git_clean_bg=71, git_dirty_bg=172, git_fg=16
          l2_bg=235, l2_fg=250, l2_label=244, l2_dim=242, scoped_label=176,
          stat_bg=236, stat_fg=250, stat_label=244, title_bg=235, title_fg=182,
          ok=71, warn=172, bad=167, dim=240,
+         effort_fg=16,
          lean_model=141, lean_git_clean=76, lean_git_dirty=178, lean_dir=31, lean_muted=245)
+# effort pill background per level — brighter/warmer as effort rises, dark text on top
+EFFORT_BG = {"low": 246, "medium": 109, "high": 110, "xhigh": 140, "max": 168}
 
 ANSI = re.compile(r"\033\[[0-9;]*m|\033\]8;[^\033\007]*(?:\007|\033\\)")   # SGR colors + OSC 8 links
 def vlen(s): return sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in ANSI.sub("", s))
@@ -402,8 +405,10 @@ def main():
         items = {}
         model_txt = f"{B}{ic(I_MODEL)}{model}"
         if SHOW_1M and lv < 1 and model_tag: model_txt += f" {fg(C['ctx_label'])}[{model_tag}]"
-        if SHOW_EFFORT and lv < 3 and effort: model_txt += f" {fg(C['ctx_label'])}{sc(EFFORT_ABBR.get(effort, effort))}"
         items["model"] = (C["model_bg"], C["lean_model"] if lean else C["model_fg"], model_txt)
+        if SHOW_EFFORT and effort:
+            eb = EFFORT_BG.get(effort, 246)
+            items["effort"] = (eb, eb if lean else C["effort_fg"], f"{B}{effort if lv < 3 else EFFORT_ABBR.get(effort, effort)}")
         if agent: items["agent"] = (C["agent_bg"], C["agent_bg"] if lean else C["agent_fg"], f"{ic(I_AGENT)}{agent}")
         if g:
             dirty = bool(g["mod"] or g["staged"] or g["conf"])
