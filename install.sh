@@ -8,6 +8,8 @@ DIR="$HOME/.claude"
 SETTINGS="$DIR/settings.json"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 FILES=(statusline.py statusline-usage.py hooks/session-title.py)
+MODS=(push-guard mem-band)                      # mods/ 아래, .claude-plugin/marketplace.json 에 적힌 것
+MARKET=claude-setting
 
 has() { command -v "$1" >/dev/null 2>&1; }
 
@@ -98,7 +100,32 @@ else
   echo "  ! python3 가 없어 건너뜀 — 설치한 뒤 다시 실행하세요"
 fi
 
-# 4. 없으면 일부 칸만 비는 것들
+# 4. mods — 이 폴더를 마켓플레이스로 등록하고 설치한다. 설치본은 이 폴더를 직접 읽으므로
+#    이후엔 git pull 뒤 Claude Code 에서 /reload-plugins 만 하면 반영된다.
+echo "mods"
+if has claude; then
+  if claude plugin marketplace list 2>/dev/null | grep -q "❯ $MARKET\$"; then
+    echo "  = 마켓플레이스 $MARKET: 이미 등록됨"
+  elif claude plugin marketplace add "$REPO" >/dev/null 2>&1; then
+    echo "  + 마켓플레이스 $MARKET"
+  else
+    echo "  ! 마켓플레이스 등록 실패 — 직접: claude plugin marketplace add \"$REPO\""
+  fi
+  installed="$(claude plugin list 2>/dev/null || true)"
+  for mod in "${MODS[@]}"; do
+    if grep -q "❯ $mod@$MARKET\$" <<<"$installed"; then
+      echo "  = $mod: 이미 설치됨"
+    elif claude plugin install "$mod@$MARKET" >/dev/null 2>&1; then
+      echo "  + $mod"
+    else
+      echo "  ! $mod 설치 실패 — 직접: claude plugin install $mod@$MARKET"
+    fi
+  done
+else
+  echo "  ! claude 명령이 없어 건너뜀"
+fi
+
+# 5. 없으면 일부 칸만 비는 것들
 echo "확인"
 missing=0
 note() { echo "  ! $1"; missing=1; }
@@ -107,4 +134,4 @@ if ! has gh; then note "gh 없음 — PR 번호·링크만 뜨고 상태(✓ · 
 elif ! gh auth status >/dev/null 2>&1; then note "gh 로그인 전 — 'gh auth login' 후 PR 상태가 붙습니다"; fi
 has claude || note "claude 명령을 못 찾음 — 오른쪽 세션 제목이 안 뜹니다"
 [ "$missing" = 0 ] && echo "  ✓ python3 · gh · claude 모두 있음"
-echo "완료. 상태표는 다음 갱신부터, 세션 제목 훅은 새로 여는 세션부터 확실히 적용됩니다."
+echo "완료. 상태표는 다음 갱신부터, 세션 제목 훅과 mods 는 새로 여는 세션부터 확실히 적용됩니다."
