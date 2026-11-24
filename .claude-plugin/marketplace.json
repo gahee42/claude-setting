@@ -1,0 +1,16 @@
+{
+  "name": "claude-setting",
+  "owner": { "name": "gahee42" },
+  "plugins": [
+    {
+      "name": "push-guard",
+      "source": "./mods/push-guard",
+      "description": "git push 전에 사람 확인을 받고, 공개 레포로 가는 변경에 막아 둔 말이 있으면 push를 막는다"
+    },
+    {
+      "name": "mem-band",
+      "source": "./mods/mem-band",
+      "description": "맥 메모리 여유가 줄면 입력창 위에 알리고, 아주 부족할 때 무거운 명령은 실행 전에 묻는다"
+    }
+  ]
+}

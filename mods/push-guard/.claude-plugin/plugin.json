@@ -1,0 +1,33 @@
+{
+  "name": "push-guard",
+  "version": "0.1.0",
+  "description": "git push 전에 사람 확인을 받고, 공개 레포로 가는 변경에 막아 둔 말이 있으면 push를 막는다",
+  "author": { "name": "gahee42" },
+  "userConfig": {
+    "askOnPush": {
+      "type": "boolean",
+      "title": "push 전에 확인 받기",
+      "description": "git push가 실행되기 전에 사람에게 묻는다. 바로 앞 메시지에 push 요청이 있으면 묻지 않는다(아래 설정).",
+      "default": true
+    },
+    "trustPrompt": {
+      "type": "boolean",
+      "title": "push를 요청한 직후에는 묻지 않기",
+      "description": "가장 최근에 직접 보낸 메시지에 push·푸시·올려 같은 말이 있으면 그 요청을 확인으로 본다.",
+      "default": true
+    },
+    "publicRepos": {
+      "type": "string",
+      "title": "공개 레포 (추가)",
+      "description": "쉼표로 구분한 owner/repo. gh로 공개 여부를 알 수 없을 때도 공개로 본다.",
+      "default": ""
+    },
+    "blockedWords": {
+      "type": "string",
+      "title": "공개 레포에 올리면 안 되는 말",
+      "description": "쉼표로 구분, 대소문자 무시. 회사·고객·내부 시스템 이름 등. 비어 있으면 검사하지 않는다. 이 기기의 보안 저장소에만 저장된다.",
+      "default": "",
+      "sensitive": true
+    }
+  }
+}

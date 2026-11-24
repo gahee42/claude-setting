@@ -1,0 +1,27 @@
+{
+  "name": "mem-band",
+  "version": "0.1.0",
+  "description": "맥 메모리 여유가 줄면 입력창 위에 한 줄로 알리고, 아주 부족할 때 무거운 테스트·빌드 명령은 실행 전에 묻는다",
+  "author": { "name": "gahee42" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "warnAt": {
+      "type": "number",
+      "title": "알림을 띄울 메모리 여유(%)",
+      "description": "macOS가 알려 주는 메모리 여유 비율이 이 값보다 낮으면 입력창 위에 한 줄을 띄운다.",
+      "default": 25
+    },
+    "askBelow": {
+      "type": "number",
+      "title": "무거운 명령 전에 물을 메모리 여유(%)",
+      "description": "이 값보다 낮으면 알림을 한 번 띄우고, 아래 패턴에 맞는 Bash 명령은 실행 전에 묻는다.",
+      "default": 12
+    },
+    "heavyCommands": {
+      "type": "string",
+      "title": "무거운 명령 패턴",
+      "description": "정규식(대소문자 무시). 메모리가 부족할 때 실행 전에 물을 명령.",
+      "default": "vitest[^;&|]*--browser|playwright\\s+test|docker\\s+(?:build|compose\\s+up)|next\\s+build"
+    }
+  }
+}
