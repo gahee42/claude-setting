@@ -32,7 +32,8 @@ git clone https://github.com/gahee42/claude-setting.git ~/lucy/claude-setting
 | `settings.json` 에 다른 상태표가 있다 | 백업한 뒤 `statusLine` 만 교체 |
 | 세션 제목 훅이 이미 있다 | 중복으로 넣지 않는다. 다른 훅·설정은 건드리지 않는다 |
 | `settings.json` 이 깨져 있다 | 아무것도 바꾸지 않고 멈춘다 |
-| mods 가 등록·설치돼 있지 않다 | 이 폴더를 마켓플레이스로 등록하고 `push-guard` · `mem-band` 를 설치한다. 이미 있으면 건너뛴다 |
+| mods 가 등록·설치돼 있지 않다 | 이 폴더를 mod 목록 `my-mods` 로 등록하고 `push-guard` · `mem-band` 를 설치한다. 이미 있으면 건너뛴다 |
+| 예전 이름 `claude-setting` 으로 등록돼 있다 | 예전 등록을 지우고 `my-mods` 로 다시 단다 |
 | `python3` · `gh` · `claude` 가 없다 | 설치는 진행하고 무엇이 빠졌는지 알려 준다 |
 
 심링크라서 이후엔 `git pull` 만 하면 바로 반영된다. 반대로 이 폴더를 지우거나 옮기면 상태표가 사라지니, 옮긴 뒤엔 `install.sh` 를 다시 실행한다.
@@ -57,21 +58,23 @@ git clone https://github.com/gahee42/claude-setting.git ~/lucy/claude-setting
 
 ## mods
 
-Claude Code 안에서 도는 작은 플러그인. 이 레포가 그대로 마켓플레이스(`.claude-plugin/marketplace.json`)라서 `install.sh` 가 이 폴더를 등록하고 설치한다. 설치본이 이 폴더를 직접 읽으므로 이후엔 `git pull` 뒤 Claude Code 에서 `/reload-plugins` 만 하면 반영된다.
+Claude Code 안에서 도는 작은 플러그인. `install.sh` 가 이 폴더를 mod 목록 `my-mods` 로 등록하고 설치한다. 설치본이 이 폴더를 직접 읽으므로 이후엔 `git pull` 뒤 Claude Code 에서 `/reload-plugins` 만 하면 반영된다.
+
+mod 목록은 Claude Code 용어로 마켓플레이스다. 외부 장터가 아니라 "어떤 mod 가 어느 폴더에 있는지" 적은 파일(`.claude-plugin/marketplace.json`) 하나다. Claude Code 는 계속 켜 둘 플러그인을 이런 목록을 거쳐서만 설치하므로 필요하다. 그래서 mod 이름이 `push-guard@my-mods` 처럼 `mod@목록` 꼴이 된다.
 
 | mod | 하는 일 |
 |---|---|
 | `push-guard` | `git push` · `gh repo create --push` 전에 확인을 받는다. 방금 직접 보낸 메시지에 push · 푸시 · 올려 같은 말이 있으면 묻지 않는다. 공개 레포로 가는 push 는 올라갈 커밋(추가된 줄과 커밋 메시지)에서 막아 둔 말을 찾아, 있으면 파일 이름과 함께 막는다 |
 | `mem-band` | 15초마다 macOS 메모리 여유를 읽는다. 25% 밑이면 입력창 위에 한 줄, 12% 밑이면 토스트를 한 번 띄우고 무거운 명령(브라우저 테스트 · docker build 등)은 실행 전에 묻는다 |
 
-설정은 Claude Code 에서 `/plugin configure push-guard@claude-setting` 처럼 연다. 값은 기기마다 따로 저장된다.
+설정은 Claude Code 의 `/plugin` 메뉴에서 바꾸고, 터미널에서는 `claude plugin configure push-guard@my-mods` 로 현재 값을 본다. 값은 기기마다 따로 저장된다.
 
 - `blockedWords` — 공개 레포에 올리면 안 되는 말(쉼표 구분). **레포에는 적지 않는다.** 이 기기의 보안 저장소에만 들어가고, 비어 있으면 검사하지 않는다.
 - `publicRepos` — `gh` 로 공개 여부를 못 볼 때도 공개로 볼 레포(`owner/repo`, 쉼표 구분).
 - `askOnPush` · `trustPrompt` — push 전 확인, 요청 직후에는 묻지 않기.
 - mem-band 는 `warnAt` · `askBelow` · `heavyCommands`(정규식).
 
-끄기: `claude plugin disable push-guard@claude-setting`
+끄기: `claude plugin disable push-guard@my-mods`
 
 알아 둘 것
 
