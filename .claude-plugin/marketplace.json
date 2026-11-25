@@ -1,5 +1,6 @@
 {
-  "name": "claude-setting",
+  "name": "my-mods",
+  "description": "gahee42 개인 mod 모음. 이 레포(claude-setting)의 mods/ 폴더를 가리키는 목록이다",
   "owner": { "name": "gahee42" },
   "plugins": [
     {
