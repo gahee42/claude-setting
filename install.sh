@@ -9,7 +9,8 @@ SETTINGS="$DIR/settings.json"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 FILES=(statusline.py statusline-usage.py hooks/session-title.py)
 MODS=(push-guard mem-band)                      # mods/ 아래, .claude-plugin/marketplace.json 에 적힌 것
-MARKET=claude-setting
+MARKET=my-mods                                  # .claude-plugin/marketplace.json 의 name
+OLD_MARKETS=(claude-setting)                    # 예전 이름 — 남아 있으면 지우고 새 이름으로 다시 단다
 
 has() { command -v "$1" >/dev/null 2>&1; }
 
@@ -100,16 +101,27 @@ else
   echo "  ! python3 가 없어 건너뜀 — 설치한 뒤 다시 실행하세요"
 fi
 
-# 4. mods — 이 폴더를 마켓플레이스로 등록하고 설치한다. 설치본은 이 폴더를 직접 읽으므로
+# 4. mods — 이 폴더를 mod 목록(Claude Code 용어로 마켓플레이스)으로 등록하고 설치한다.
+#    외부 장터가 아니라 이 폴더 자체다. 설치본도 이 폴더를 직접 읽으므로
 #    이후엔 git pull 뒤 Claude Code 에서 /reload-plugins 만 하면 반영된다.
 echo "mods"
 if has claude; then
-  if claude plugin marketplace list 2>/dev/null | grep -q "❯ $MARKET\$"; then
-    echo "  = 마켓플레이스 $MARKET: 이미 등록됨"
+  markets="$(claude plugin marketplace list 2>/dev/null || true)"
+  for old in "${OLD_MARKETS[@]}"; do
+    grep -q "❯ $old\$" <<<"$markets" || continue
+    for mod in "${MODS[@]}"; do claude plugin uninstall "$mod@$old" >/dev/null 2>&1 || true; done
+    if claude plugin marketplace remove "$old" >/dev/null 2>&1; then
+      echo "  ↺ mod 목록 이름 변경: $old → $MARKET"
+    else
+      echo "  ! 예전 목록 $old 를 못 지움 — 직접: claude plugin marketplace remove $old"
+    fi
+  done
+  if grep -q "❯ $MARKET\$" <<<"$markets"; then
+    echo "  = mod 목록 $MARKET: 이미 등록됨 (이 폴더)"
   elif claude plugin marketplace add "$REPO" >/dev/null 2>&1; then
-    echo "  + 마켓플레이스 $MARKET"
+    echo "  + mod 목록 $MARKET 등록 (이 폴더, 외부 마켓 아님)"
   else
-    echo "  ! 마켓플레이스 등록 실패 — 직접: claude plugin marketplace add \"$REPO\""
+    echo "  ! mod 목록 등록 실패 — 직접: claude plugin marketplace add \"$REPO\""
   fi
   installed="$(claude plugin list 2>/dev/null || true)"
   for mod in "${MODS[@]}"; do
