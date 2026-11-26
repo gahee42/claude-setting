@@ -1,0 +1,6 @@
+{
+  "name": "session-id",
+  "version": "0.1.0",
+  "description": "입력창 오른쪽에 이 세션 ID를 띄우고 /sid 로 복사한다. 다른 세션 메시지에 붙여 넣으면 그 세션으로 일을 보낼 수 있다",
+  "author": { "name": "gahee42" }
+}

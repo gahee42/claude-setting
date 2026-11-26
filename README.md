@@ -32,7 +32,7 @@ git clone https://github.com/gahee42/claude-setting.git ~/lucy/claude-setting
 | `settings.json` 에 다른 상태표가 있다 | 백업한 뒤 `statusLine` 만 교체 |
 | 세션 제목 훅이 이미 있다 | 중복으로 넣지 않는다. 다른 훅·설정은 건드리지 않는다 |
 | `settings.json` 이 깨져 있다 | 아무것도 바꾸지 않고 멈춘다 |
-| mods 가 등록·설치돼 있지 않다 | 이 폴더를 mod 목록 `my-mods` 로 등록하고 `push-guard` · `mem-band` 를 설치한다. 이미 있으면 건너뛴다 |
+| mods 가 등록·설치돼 있지 않다 | 이 폴더를 mod 목록 `my-mods` 로 등록하고 `push-guard` · `mem-band` · `session-id` 를 설치한다. 이미 있으면 건너뛴다 |
 | 예전 이름 `claude-setting` 으로 등록돼 있다 | 예전 등록을 지우고 `my-mods` 로 다시 단다 |
 | `python3` · `gh` · `claude` 가 없다 | 설치는 진행하고 무엇이 빠졌는지 알려 준다 |
 
@@ -66,6 +66,7 @@ mod 목록은 Claude Code 용어로 마켓플레이스다. 외부 장터가 아�
 |---|---|
 | `push-guard` | `git push` · `gh repo create --push` 전에 확인을 받는다. 방금 직접 보낸 메시지에 push · 푸시 · 올려 같은 말이 있으면 묻지 않는다. 공개 레포로 가는 push 는 올라갈 커밋(추가된 줄과 커밋 메시지)에서 막아 둔 말을 찾아, 있으면 파일 이름과 함께 막는다 |
 | `mem-band` | 15초마다 macOS 메모리 여유를 읽는다. 25% 밑이면 입력창 위에 한 줄, 12% 밑이면 토스트를 한 번 띄우고 무거운 명령(브라우저 테스트 · docker build 등)은 실행 전에 묻는다 |
+| `session-id` | 입력창 오른쪽에 `sid 앞8자리` 를 띄우고, `/sid` 로 전체 세션 ID 를 복사한다. 다른 세션에 "세션 `<ID>` 에 …라고 전해 줘" 처럼 붙여 넣으면 그 세션으로 메시지가 간다 |
 
 설정은 Claude Code 의 `/plugin` 메뉴에서 바꾸고, 터미널에서는 `claude plugin configure push-guard@my-mods` 로 현재 값을 본다. 값은 기기마다 따로 저장된다.
 
@@ -81,6 +82,7 @@ mod 목록은 Claude Code 용어로 마켓플레이스다. 외부 장터가 아�
 - push-guard 는 사람이 직접 보낸 메시지(터미널 입력, 폰의 Remote Control)만 요청으로 본다. `claude -p`, 예약 작업, 다른 세션이 시작한 턴에서는 요청 없는 push 를 막는다.
 - 공개 여부는 `gh repo view` 로 본다. `gh` 가 없거나 볼 수 없는 레포(회사 org 등)는 공개로 보지 않는다. 필요하면 `publicRepos` 에 적는다.
 - 금지어 검사는 현재 브랜치(HEAD)가 upstream 보다 앞선 커밋만 읽는다. 다른 브랜치를 이름으로 push 하면 그 브랜치는 읽지 않는다.
+- session-id 의 오른쪽 칸은 터미널 전체 화면 레이아웃과 데스크톱 앱 Code 탭에서만 보인다. `/sid` 는 어디서나 된다. 받는 세션이 권한 모드가 다르면 메시지를 바로 읽지 않고 그쪽 사람의 승인을 기다린다.
 - mod API 는 아직 early access 라 Claude Code 버전마다 바뀔 수 있다. 기기끼리 버전을 맞춘다. 테스트는 `claude plugin test mods/push-guard`.
 
 ## 어떻게 동작하나
