@@ -12,6 +12,11 @@
       "name": "mem-band",
       "source": "./mods/mem-band",
       "description": "맥 메모리 여유가 줄면 입력창 위에 알리고, 아주 부족할 때 무거운 명령은 실행 전에 묻는다"
+    },
+    {
+      "name": "session-id",
+      "source": "./mods/session-id",
+      "description": "입력창 오른쪽에 이 세션 ID를 띄우고 /sid 로 복사한다. 다른 세션 메시지에 붙여 넣으면 그 세션으로 일을 보낼 수 있다"
     }
   ]
 }
