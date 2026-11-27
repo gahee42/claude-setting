@@ -1,7 +1,15 @@
 {
   "name": "side-panel",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "/side 로 Claude Code 왼쪽에 세로로 긴 세션 패널을 연다(Ghostty 분할 창): 제목·세션 ID·아티팩트·PR·에이전트·백그라운드 셸",
   "author": { "name": "gahee42" },
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoOpen": {
+      "type": "boolean",
+      "title": "세션을 열 때 왼쪽 패널도 열기",
+      "description": "Ghostty 에서 터미널이 110칸 이상이면, 세션이 시작될 때 왼쪽에 세션 패널을 연다. 손으로 닫은 세션에서는 다시 열지 않는다.",
+      "default": true
+    }
+  }
 }

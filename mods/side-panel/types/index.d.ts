@@ -9,6 +9,7 @@ declare module 'claude-code' {
     'side-panel': {
       open: Shaped<Open | null>
       tasks: Shaped<Task[]>
+      dismissed: boolean
     }
   }
 }

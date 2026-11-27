@@ -45,6 +45,43 @@ export function asText(s: string): string {
   return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
 
+/** The tty this session's Claude Code draws on: the first of the caller's ancestors that has one. */
+export const TTY_SH =
+  'p=$PPID; for i in 1 2 3 4 5 6; do t=$(ps -o tty= -p "$p" | tr -d " "); ' +
+  'case "$t" in ttys*) echo "$t"; exit 0;; esac; p=$(ps -o ppid= -p "$p" | tr -d " "); done; exit 1'
+
+/**
+ * Finds the Ghostty terminal drawn on `tty`, focused or not: titles it `marker` for a moment,
+ * asks Ghostty which terminal has that title, then gives the terminal its title back. Prints the
+ * terminal's id, or nothing.
+ */
+export function findOwnScript(tty: string, marker: string): string {
+  const title = (of: string) => String.raw`do shell script "printf '\\033]2;%s\\007' " & quoted form of ` + `${of} & " > /dev/${tty}"`
+  return [
+    `set marker to ${asText(marker)}`,
+    'tell application "Ghostty"',
+    '  set allIds to id of every terminal',
+    '  set allNames to name of every terminal',
+    'end tell',
+    title('marker'),
+    'set myId to ""',
+    'repeat 6 times',
+    '  tell application "Ghostty" to set found to id of every terminal whose name is marker',
+    '  if (count of found) is 1 then',
+    '    set myId to item 1 of found',
+    '    exit repeat',
+    '  end if',
+    '  delay 0.15',
+    'end repeat',
+    'set oldName to ""',
+    'repeat with i from 1 to count of allIds',
+    '  if item i of allIds is myId then set oldName to item i of allNames',
+    'end repeat',
+    title('oldName'),
+    'return myId',
+  ].join('\n')
+}
+
 /** The focused terminal of Ghostty's front window; osascript prints `id, working directory`. */
 export const FOCUSED_SCRIPT = [
   'tell application "Ghostty"',

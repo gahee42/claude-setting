@@ -1,7 +1,7 @@
 import type { AgentInfo, On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { asText, isSessionTerminal, settleTasks, sideCommand, splitScript, trackShell } from '../hooks/side'
+import { asText, findOwnScript, isSessionTerminal, settleTasks, sideCommand, splitScript, trackShell } from '../hooks/side'
 
 const ID = 'dc54fc3b-0272-4cba-b9cc-d71a00a62d46'
 
@@ -12,15 +12,24 @@ const RUN_SIDE = {
   presentation: { isFullscreen: true, columns: 140 },
 } as const
 
-type Run = { argv: readonly string[] }
+const START = { cwd: '/work', surface: 'terminal', isInteractive: true } as const
 
-/** The engine beneath: a session in /work, HOME=/Users/me, and what each call wrote, ran or copied. */
-function world(on: On, env: Record<string, string>, osascript: (script: string) => string) {
+type Machine = {
+  env?: Record<string, string>
+  tty?: string // what the tty lookup prints; '' fails it
+  columns?: number
+  own?: string // the terminal the title marker finds
+  focused?: string // `id, working directory` of Ghostty's focused terminal
+  made?: string // the split's new terminal id
+}
+
+/** The engine and the machine beneath: a session in /work, HOME=/Users/me; what was run, written, copied. */
+function world(on: On, m: Machine) {
   const files: Record<string, string> = {}
-  const ran: string[] = []
+  const splits: string[] = []
   const copied: string[] = []
-  mock.clock(on, { now: 1_000_000 })
-  mock.env(on, { HOME: '/Users/me', PATH: '/opt/homebrew/bin:/usr/bin', ...env })
+  const clock = mock.clock(on, { now: 1_000_000 })
+  mock.env(on, { HOME: '/Users/me', PATH: '/opt/homebrew/bin:/usr/bin', TERM_PROGRAM: 'ghostty', ...m.env })
   on('session.id', () => ({ value: ID }))
   on('session.info', () => ({ value: { transcriptPath: '/t.jsonl' } }))
   on('session.root', () => ({ value: '/work' }))
@@ -32,25 +41,31 @@ function world(on: On, env: Record<string, string>, osascript: (script: string) 
     return { value: undefined }
   })
   on('fs.exists', () => ({ value: false }))
-  on('process.run', (_, e: Run) => {
-    const script = e.argv[2] ?? ''
-    ran.push(script)
-    return { value: { exitCode: 0, stdout: osascript(script), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  on('process.run', (_, e) => {
+    const [cmd = '', , arg = ''] = e.argv
+    let out: string | null = null
+    if (cmd === '/bin/sh') out = m.tty ?? 'ttys003'
+    else if (cmd === 'stty') out = `61 ${m.columns ?? 140}`
+    else if (arg.includes('whose name is marker')) out = m.own ?? 'T1'
+    else if (arg.includes('focused terminal')) out = m.focused ?? ''
+    else if (arg.includes('split t direction left')) {
+      splits.push(arg)
+      out = m.made ?? 'NEW'
+    }
+    const ok = out !== null && out !== ''
+    return { value: { exitCode: ok ? 0 : 1, stdout: ok ? `${out}\n` : '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
   on('ui.copy', (_, e) => {
     copied.push(e.text)
     return { value: { isCopied: true } }
   })
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  return { files, ran, copied }
+  return { files, splits, copied, clock }
 }
 
-const feedOf = (files: Record<string, string>) => {
-  const [path, text] = Object.entries(files).at(-1) ?? ['', '{}']
-  return { path, feed: JSON.parse(text) as Record<string, unknown> }
-}
+const lastFeed = (files: Record<string, string>) => JSON.parse(Object.values(files).at(-1) ?? '{}') as Record<string, unknown>
 
-test('AppleScript text is quoted, and the split goes left and gives the keys back', () => {
+test('AppleScript text is quoted; the split goes left, waits for nothing and gives the keys back', () => {
   expect(asText('a "b" \\c')).toBe('"a \\"b\\" \\\\c"')
   const script = splitScript('T1', 'python3 "/Users/me/.claude/side.py" k', ['PATH=/bin'], '/Users/me')
   expect(script).toContain('set t to terminal id "T1"')
@@ -59,6 +74,14 @@ test('AppleScript text is quoted, and the split goes left and gives the keys bac
   expect(script).toContain('set wait after command of cfg to false')
   expect(script).toContain('focus t')
   expect(sideCommand('/Users/me', 'k')).toBe('python3 "/Users/me/.claude/side.py" k')
+})
+
+test("the terminal finder titles this session's tty, asks Ghostty for that title, and puts the title back", () => {
+  const script = findOwnScript('ttys003', 'claude-side-x')
+  expect(script).toContain('set marker to "claude-side-x"')
+  expect(script).toContain(`do shell script "printf '\\\\033]2;%s\\\\007' " & quoted form of marker & " > /dev/ttys003"`)
+  expect(script).toContain('id of every terminal whose name is marker')
+  expect(script).toContain('quoted form of oldName & " > /dev/ttys003"')
 })
 
 test('the focused terminal is this session only where it started, or above its worktree', () => {
@@ -81,44 +104,72 @@ test('shells run until they leave the in-flight list; subagents stay out', () =>
   ])
 })
 
-test('in Ghostty /side splits this terminal to the left and feeds it', async ($, on) => {
-  const { files, ran, copied } = world(on, { TERM_PROGRAM: 'ghostty' }, script =>
-    script.includes('focused terminal') ? 'T1, /work\n' : 'NEW\n',
-  )
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+test('in Ghostty the panel opens by itself as the session starts, left of its own terminal', async ($, on) => {
+  const { files, splits, copied, clock } = world(on, {})
+  await $.session.start(START)
+  expect(splits).toEqual([])
+
+  await clock.advance(1_500)
+  expect(splits.length).toBe(1)
+  expect(splits[0]).toContain('set t to terminal id "T1"')
+  expect(splits[0]).toContain('"PATH=/opt/homebrew/bin:/usr/bin"')
+  expect(copied).toEqual([])
+  expect(lastFeed(files)).toMatchObject({ sessionId: ID, transcript: '/t.jsonl', termId: 'NEW', agents: [], tasks: [] })
+})
+
+test('it does not open by itself in a narrow terminal, and writes no feed', async ($, on) => {
+  const { splits, files, clock } = world(on, { columns: 100 })
+  await $.session.start(START)
+  await clock.advance(1_500)
+  expect(splits).toEqual([])
+  expect(files).toEqual({})
+})
+
+test('outside Ghostty nothing opens by itself', async ($, on) => {
+  const { splits, files, clock } = world(on, { env: { TERM_PROGRAM: 'iTerm.app' } })
+  await $.session.start(START)
+  await clock.advance(1_500)
+  expect(splits).toEqual([])
+  expect(files).toEqual({})
+})
+
+test('with autoOpen off nothing opens by itself', { options: { autoOpen: false } }, async ($, on) => {
+  const { splits, clock } = world(on, {})
+  await $.session.start(START)
+  await clock.advance(1_500)
+  expect(splits).toEqual([])
+})
+
+test('/side closes the open panel, and a reload does not open it again until /side', async ($, on) => {
+  const { files, splits, clock } = world(on, {})
+  await $.session.start(START)
+  await clock.advance(1_500)
+  expect(splits.length).toBe(1)
 
   const { text } = await $.command.run(RUN_SIDE)
-  expect(text).toBe('왼쪽에 세션 패널을 열었어요. /side 로 닫아요.')
-  expect(ran.length).toBe(2)
-  expect(ran[1]).toContain('set t to terminal id "T1"')
-  expect(ran[1]).toContain('"PATH=/opt/homebrew/bin:/usr/bin"')
-  expect(copied).toEqual([])
+  expect(text).toContain('닫았어요')
+  expect(lastFeed(files)).toMatchObject({ closed: true })
 
-  const { path, feed } = feedOf(files)
-  expect(path).toMatch(/^\/Users\/me\/\.claude\/side\/[\w-]+\.json$/)
-  expect(feed).toMatchObject({ sessionId: ID, transcript: '/t.jsonl', termId: 'NEW', agents: [], tasks: [] })
+  await $.session.start(START) // what /reload-plugins runs again
+  await clock.advance(1_500)
+  expect(splits.length).toBe(1)
+
+  expect((await $.command.run(RUN_SIDE)).text).toBe('왼쪽에 세션 패널을 열었어요. /side 로 닫아요.')
+  expect(splits.length).toBe(2)
+})
+
+test('when the tty lookup fails, a typed /side splits the focused terminal only if it is this session', async ($, on) => {
+  const { splits } = world(on, { tty: '', focused: 'F1, /work' })
+  await $.session.start(START)
+  await $.command.run(RUN_SIDE)
+  expect(splits[0]).toContain('set t to terminal id "F1"')
 })
 
 test('when the focused terminal is another one, /side copies the command instead', async ($, on) => {
-  const { ran, copied } = world(on, { TERM_PROGRAM: 'ghostty' }, () => 'T9, /somewhere/else\n')
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-
+  const { splits, copied } = world(on, { tty: '', focused: 'F9, /somewhere/else' })
+  await $.session.start(START)
   const { text } = await $.command.run(RUN_SIDE)
-  expect(ran.length).toBe(1)
-  expect(copied.length).toBe(1)
+  expect(splits).toEqual([])
   expect(copied[0]).toMatch(/^python3 "\/Users\/me\/\.claude\/side\.py" [\w-]+$/)
   expect(text).toContain('복사했어요')
-})
-
-test('outside Ghostty /side copies the command, and /side again closes the panel', async ($, on) => {
-  const { files, ran, copied } = world(on, { TERM_PROGRAM: 'iTerm.app' }, () => '')
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-
-  await $.command.run(RUN_SIDE)
-  expect(ran).toEqual([])
-  expect(copied.length).toBe(1)
-
-  const { text } = await $.command.run(RUN_SIDE)
-  expect(text).toBe('세션 패널을 닫았어요.')
-  expect(feedOf(files).feed).toMatchObject({ closed: true })
 })
