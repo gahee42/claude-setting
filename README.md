@@ -12,7 +12,8 @@ ctx 31%  cost $14.89  time 35m28s                    PR #128 ✓ #125 merged
 - **2줄**: 컨텍스트 · 비용 · 경과 시간, 오른쪽에 **이 세션이 올린 PR**
   - 번호를 **Cmd+클릭**하면 PR이 열린다
   - `✓` CI 통과 · `✗` 실패 · `⋯` 도는 중 · `draft` · `merged` · `closed`, 3개를 넘으면 `+N`
-- **3줄**: 5시간 · 7일 · 모델별 주간 사용량과 초기화 시각
+- **3줄**: 5시간 · 7일 · 모델별 주간 사용량과 초기화 시각, 오른쪽에 **세션 ID 앞 8자리**(다른 세션에 일을 보낼 때. 전체는 `/sid`)
+- 오른쪽 세 칸(제목 · PR · 세션 ID)은 끝을 맞춘 알약이고, 앞에 Nerd Font 아이콘이 붙는다
 
 ## 설치
 
@@ -54,6 +55,8 @@ git clone https://github.com/gahee42/claude-setting.git ~/lucy/claude-setting
 
 - `TITLE_LINE = -1` — 세션 제목 끄기
 - `PR_LINE = -1` — PR 칸 끄기
+- `SID_LINE = -1` — 세션 ID 칸 끄기
+- `RIGHT_ICONS = False` — 오른쪽 칸의 아이콘 끄기(`PR` · `sid` 글자로 돌아간다)
 - `LINES` — 줄 구성과 순서
 
 ## mods
