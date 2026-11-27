@@ -1,7 +1,7 @@
 import type { AgentInfo } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
-import { agentRows, parseInfo, prMark, settleTasks, trackShell } from '../hooks/panel'
+import { agentRows, COLOR, NERD, parseInfo, prMark, settleTasks, trackShell } from '../hooks/panel'
 
 const ID = 'dc54fc3b-0272-4cba-b9cc-d71a00a62d46'
 const PR = 'https://github.com/gahee42/claude-setting/pull/5'
@@ -68,9 +68,10 @@ test('only the last three ended tasks are kept', () => {
 
 test('a PR shows CI or how it ended', () => {
   const pr = { url: PR, num: 5, state: 'OPEN', draft: false, ci: 'pass' }
-  expect(prMark(pr)).toEqual({ text: '✓', color: 'success' })
-  expect(prMark({ ...pr, state: 'MERGED' }).text).toBe('merged')
-  expect(prMark({ ...pr, draft: true, ci: '' }).text).toBe('draft')
+  expect(prMark(pr)).toEqual({ text: '✓', color: COLOR.ok })
+  expect(prMark(pr, NERD)).toEqual({ text: NERD.done, color: COLOR.ok })
+  expect(prMark({ ...pr, state: 'MERGED' }, NERD)).toEqual({ text: `${NERD.merged} merged`, color: COLOR.merged })
+  expect(prMark({ ...pr, draft: true, ci: '' }).text).toBe('✎ draft')
 })
 
 test('/side opens the panel and fills it: title, sid, PR, agents', async ($, on) => {
@@ -109,7 +110,7 @@ test('/side opens the panel and fills it: title, sid, PR, agents', async ($, on)
   expect(opened).toEqual(['side'])
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect((await ui.find({ type: 'Text', text: /정산서/ }))?.text).toBe('정산서 차감내역')
+  expect((await ui.find({ type: 'Text', text: /정산서/ }))?.text).toBe(`${NERD.title} 정산서 차감내역`)
   expect((await ui.find({ type: 'Button', key: 'sid' }))?.text).toContain('sid dc54fc3b')
   expect((await ui.find({ type: 'Link' }))?.text).toContain('#5')
   expect((await ui.find({ type: 'Text', text: /Explore/ }))?.text).toContain('정산 코드 찾기')
@@ -145,7 +146,27 @@ test('a background shell shows in the panel', async ($, on) => {
 
   await $.tool.call({ tool: 'Bash', command: 'yarn test:default', description: '테스트 돌리기', run_in_background: true })
 
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect((await ui.find({ type: 'Text', text: /테스트 돌리기/ }))?.text).toContain('●')
-  await ui.unmount()
+  const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await terminal.find({ type: 'Text', text: /테스트 돌리기/ }))?.text).toContain(NERD.running)
+  await terminal.unmount()
+
+  const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await desktop.find({ type: 'Text', text: /테스트 돌리기/ }))?.text).toContain('●')
+  await desktop.unmount()
+})
+
+test('the terminal draws icons in round pills; desktop gets no Nerd Font glyphs', async ($, on) => {
+  on('session.id', () => ({ value: ID }))
+
+  const terminal = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const header = await terminal.find({ type: 'Text', text: /에이전트 0/ })
+  expect(header?.text).toContain(`${NERD.capL}${NERD.agent} 에이전트 0${NERD.capR}`)
+  expect((await terminal.find({ type: 'Button', key: 'sid' }))?.text).toContain(`${NERD.sid} sid dc54fc3b`)
+  await terminal.unmount()
+
+  const desktop = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const button = (await desktop.find({ type: 'Button', key: 'sid' }))?.text ?? ''
+  expect(button).toContain('sid dc54fc3b')
+  expect(/[\ue000-\uf8ff]/.test(button)).toBe(false)
+  await desktop.unmount()
 })

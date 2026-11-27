@@ -11,7 +11,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import { agentMark, agentRows, parseInfo, prMark, same, settleTasks, SHORT_ID, trackShell } from './panel'
+import { agentMark, agentRows, COLOR, NERD, parseInfo, PLAIN, prMark, same, settleTasks, SHORT_ID, trackShell } from './panel'
 
 const PANE = 'side'
 const TITLE = '세션'
@@ -98,48 +98,76 @@ export const register: Register = on => {
       $.ui.toast(copied.isCopied ? `세션 ID를 복사했어요: ${id}` : `세션 ID: ${id}`)
     }
 
+    // The terminal draws the status line's Nerd Font: icons and round pills.
+    // Elsewhere no such font is promised, so plain symbols and bold labels.
+    const isNerd = e.surface === 'terminal'
+    const g = isNerd ? NERD : PLAIN
+    const pill = (label: string, bg: string, fg: string) =>
+      isNerd ? (
+        <Text>
+          <Text color={bg}>{g.capL}</Text>
+          <Text backgroundColor={bg} color={fg}>
+            {label}
+          </Text>
+          <Text color={bg}>{g.capR}</Text>
+        </Text>
+      ) : (
+        <Text bold>{label}</Text>
+      )
+    const icon = (glyph: string, label: string) => (glyph ? `${glyph} ${label}` : label)
+    const none = <Text color={COLOR.dim}> 없음</Text>
+    const runningAgents = agentList.filter(a => agentMark(a.status).isActive).length
+    const runningTasks = taskList.filter(t => t.isRunning).length
+
     return (
       <Box flexDirection="column">
-        <Text bold maxLines={3}>
-          {title || '(제목 아직 없음)'}
+        <Text bold color={COLOR.title} maxLines={3}>
+          {icon(g.title, title || '(제목 아직 없음)')}
         </Text>
         <Button key="sid" hotkey="c" onPress={copy}>
-          sid {id.slice(0, SHORT_ID)} <Text dimColor>복사</Text>
+          {pill(icon(g.sid, `sid ${id.slice(0, SHORT_ID)}`), COLOR.sidBg, COLOR.sidFg)}
+          <Text color={COLOR.label}> c 복사</Text>
         </Button>
 
         <Box marginTop={1} flexDirection="column">
-          <Text dimColor>PR</Text>
-          {prs.length === 0 && <Text dimColor>없음</Text>}
+          {pill(icon(g.pr, `PR ${prs.length}`), COLOR.pillBg, COLOR.pillFg)}
+          {prs.length === 0 && none}
           {prs.map(pr => {
-            const mark = prMark(pr)
+            const mark = prMark(pr, g)
             return (
               <Text key={pr.url}>
+                {' '}
                 <Link href={pr.url}>#{String(pr.num)}</Link>
-                {mark.text !== '' && <Text color={mark.color} dimColor={!mark.color}> {mark.text}</Text>}
+                {mark.text !== '' && <Text color={mark.color}> {mark.text}</Text>}
               </Text>
             )
           })}
         </Box>
 
         <Box marginTop={1} flexDirection="column">
-          <Text dimColor>에이전트 {String(agentList.filter(a => agentMark(a.status).color === 'warning').length)}</Text>
-          {agentList.length === 0 && <Text dimColor>없음</Text>}
+          {pill(icon(g.agent, `에이전트 ${runningAgents}`), COLOR.pillBg, COLOR.pillFg)}
+          {agentList.length === 0 && none}
           {agentList.map(a => {
-            const mark = agentMark(a.status)
+            const mark = agentMark(a.status, g)
             return (
-              <Text key={a.id} wrap="truncate-end" dimColor={mark.color !== 'warning'}>
-                <Text color={mark.color}>{mark.dot}</Text> {a.type} <Text dimColor>{a.label}</Text>
+              <Text key={a.id} wrap="truncate-end">
+                {' '}
+                <Text color={mark.color}>{mark.dot}</Text>
+                <Text color={mark.isActive ? COLOR.pillFg : COLOR.label}> {a.type}</Text>
+                <Text color={COLOR.label}> {a.label}</Text>
               </Text>
             )
           })}
         </Box>
 
         <Box marginTop={1} flexDirection="column">
-          <Text dimColor>백그라운드 {String(taskList.filter(t => t.isRunning).length)}</Text>
-          {taskList.length === 0 && <Text dimColor>없음</Text>}
+          {pill(icon(g.shell, `백그라운드 ${runningTasks}`), COLOR.pillBg, COLOR.pillFg)}
+          {taskList.length === 0 && none}
           {taskList.map(t => (
-            <Text key={t.id} wrap="truncate-end" dimColor={!t.isRunning}>
-              <Text color={t.isRunning ? 'warning' : 'success'}>{t.isRunning ? '●' : '✓'}</Text> {t.label}
+            <Text key={t.id} wrap="truncate-end">
+              {' '}
+              <Text color={t.isRunning ? COLOR.warn : COLOR.ok}>{t.isRunning ? g.running : g.done}</Text>
+              <Text color={t.isRunning ? COLOR.pillFg : COLOR.label}> {t.label}</Text>
             </Text>
           ))}
         </Box>
