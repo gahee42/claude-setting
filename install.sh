@@ -8,7 +8,7 @@ DIR="$HOME/.claude"
 SETTINGS="$DIR/settings.json"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 FILES=(statusline.py statusline-usage.py hooks/session-title.py)
-MODS=(push-guard mem-band session-id)                    # mods/ 아래, .claude-plugin/marketplace.json 에 적힌 것
+MODS=(push-guard mem-band session-id side-panel)         # mods/ 아래, .claude-plugin/marketplace.json 에 적힌 것
 MARKET=my-mods                                  # .claude-plugin/marketplace.json 의 name
 OLD_MARKETS=(claude-setting)                    # 예전 이름 — 남아 있으면 지우고 새 이름으로 다시 단다
 

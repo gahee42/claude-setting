@@ -17,6 +17,11 @@
       "name": "session-id",
       "source": "./mods/session-id",
       "description": "입력창 오른쪽에 이 세션 ID를 띄우고 /sid 로 복사한다. 다른 세션 메시지에 붙여 넣으면 그 세션으로 일을 보낼 수 있다"
+    },
+    {
+      "name": "side-panel",
+      "source": "./mods/side-panel",
+      "description": "터미널 전체 화면에서 대화 오른쪽에 세션 패널을 붙인다: 세션 ID·AI 제목·PR, 지금 도는 에이전트와 백그라운드 셸"
     }
   ]
 }
