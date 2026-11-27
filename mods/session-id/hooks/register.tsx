@@ -19,8 +19,12 @@ export const register: Register = on => {
 
   on('command.run', { command: 'sid' }, async $ => ({ text: await copyId($) }))
 
-  // In the terminal's fullscreen layout and the desktop's Code tab.
+  // Desktop's Code tab only: there the cell sits in a free gutter. In the
+  // terminal a cell makes the prompt and the status line give its columns up
+  // for the whole height, leaving a blank block and cutting the status line's
+  // right-aligned pills, so there the status line (statusline.py) shows the id.
   on('ui.render', { component: 'BesidePrompt' }, async ($, e, next) => {
+    if (e.surface !== 'desktop') return next(e)
     const id = await $.session.id()
     const label = `sid ${id.slice(0, SHORT)}`
     if (!id || e.props.maxColumns < label.length) return next(e)
