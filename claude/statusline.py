@@ -10,7 +10,7 @@ Per-model weekly limits are not in the status-line JSON; statusline-usage.py fet
 background every USAGE_TTL seconds (set FETCH_USAGE = False to disable).
 Width override: CLAUDE_STATUSLINE_WIDTH=<n>.  Detected width → ~/.claude/statusline.width
 """
-import glob, hashlib, json, os, re, shutil, subprocess, sys, tempfile, time, unicodedata
+import glob, hashlib, html, json, os, re, shutil, subprocess, sys, tempfile, time, unicodedata
 from datetime import datetime, timezone
 
 # ---------- user knobs ----------
@@ -42,7 +42,10 @@ PR_TTL_OPEN = 60          # seconds between background `gh pr view` refreshes of
 PR_TTL_DONE = 3600        # merged / closed PRs rarely change
 PR_MAX      = 3           # newest PRs shown; older ones collapse into "+N"
 SID_LINE    = 2           # line index that shows "sid <first 8 of the session id>" right-aligned, dim (-1 = off)
-RIGHT_ICONS = True        # Nerd Font icon on the right-hand pills (title, PR, sid) even when ICONS is off
+ART_LINE    = 1           # line index that shows the artifacts this session published, right-aligned, Cmd+click opens (-1 = off)
+ART_MAX     = 2           # newest artifacts shown; older ones collapse into "+N"
+ART_TITLE_MAX = 28        # columns one artifact title may take; narrower terminals cut it further with "…"
+RIGHT_ICONS = True        # Nerd Font icon on the right-hand pills (title, PR, artifacts, sid) even when ICONS is off
 WIDTH_MARGIN = 4          # columns kept free at the right edge (Claude Code indents the status line and
                           # ellipsizes anything that overflows, so leave it room)
 DIR_MODE    = "repo"      # "repo" = repository name (from origin; worktree-safe) | "path" = working directory
@@ -61,7 +64,7 @@ I_MODEL, I_BRANCH, I_DIR, I_CTX = "\uf0e7", "\ue0a0", "\uf07b", "\uf2db"        
 I_5H, I_7D, I_SCOPED, I_COST   = "\uf252", "\uf073", "\uf005", "\uf155"         # hourglass, calendar, star, $
 I_TIME, I_DIFF, I_VER, I_RESET  = "\uf017", "\uf044", "\uf02b", "\uf021"         # clock, pencil, tag, refresh
 I_AGENT, I_USAGE = "\uf17b", "\uf0e4"   # android, gauge
-I_TITLE, I_PR, I_SID = "\uf075", "\uf407", "\uf2c1"   # comment, git-pull-request, id-badge (right-hand pills)
+I_TITLE, I_PR, I_SID, I_ART = "\uf075", "\uf407", "\uf2c1", "\uf0f6"   # comment, git-pull-request, id-badge, file-text (right-hand pills)
 L_CAP, R_CAP, ARROW, THIN = "\ue0b6", "\ue0b4", "\ue0b0", "\ue0b1"               # ( ) ▶ ›
 I_STAGED, I_MOD, I_UNTR, I_CONF, I_AHEAD, I_BEHIND = "+", "!", "?", "~", "⇡", "⇣"
 
@@ -258,18 +261,54 @@ def git_flags(g, ok, warn, bad, muted):
     if g["behind"]: f.append(f"{warn}{I_BEHIND}{g['behind']}")
     return " ".join(f)
 
-# ---------- PRs this session opened or edited ----------
+# ---------- PRs and artifacts this session made ----------
 # Claude Code stamps every `gh pr create` / `gh pr edit` result in the transcript as
 # toolUseResult.gitOperation.pr = {number, url, action}; subagents write their own transcripts under
 # <session>/subagents/. Only bytes appended since the last tick are read. The payload's `pr` (the
 # current branch's PR) is added too, but it disappears once that PR merges — the transcript keeps it.
 # State and CI come from `gh pr view`, which takes ~3s, so it runs detached and is cached per URL.
-def session_prs(session_id, transcript):
-    """[[url, number]] this session touched, most recent last."""
-    if not session_id or not transcript: return []
-    c = _cache_read("prscan", session_id)
+#
+# An Artifact publish answers in plain text: "Published <file> at <url> (Version …", "Updated the
+# Artifact at <url> (…", "Created a new Artifact at <url> (…", or "<artifact-deleted url=…>". The
+# title is the call's `title`, else the published page's <title> (or a .md's first heading), else
+# the file's name. The call and its answer can land in different ticks, so the calls wait in `calls`.
+_ART_URL = r"https://claude\.ai/(?:code/)?artifact/[\w-]+"
+_ART_DONE = re.compile(r"^(?:Published (?P<file>\S+) at|Updated the Artifact at|Created a new Artifact at) (?P<url>" + _ART_URL + ")")
+_ART_GONE = re.compile(r'<artifact-deleted url="(' + _ART_URL + ')"')
+
+def _page_title(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f: head = f.read(65536)
+    except Exception: return ""
+    if path.endswith((".html", ".htm")):
+        m = re.search(r"<title[^>]*>(.*?)</title>", head, re.I | re.S)
+        return re.sub(r"\s+", " ", html.unescape(m.group(1))).strip() if m else ""
+    if path.endswith(".md"):
+        m = re.search(r"(?m)^#\s+(.+)$", head)
+        return m.group(1).strip() if m else ""
+    return ""
+
+def _art_title(call, file, old):
+    if call.get("title"): return str(call["title"]).strip()
+    path = file or call.get("file_path") or ""
+    t = _page_title(path) if path else ""
+    if t: return t
+    if old: return old
+    return os.path.splitext(os.path.basename(path))[0] if path else "artifact"
+
+def _result_text(c):
+    r = c.get("content")
+    if isinstance(r, str): return r
+    return " ".join(x.get("text", "") for x in r or [] if isinstance(x, dict))
+
+def session_outputs(session_id, transcript):
+    """([[url, number]] PRs, [[url, title]] artifacts) this session made, most recent last."""
+    if not session_id or not transcript: return [], []
+    c = _cache_read("outscan", session_id)
     st = c[1] if c else {}
-    offs, prs = dict(st.get("offsets") or {}), [list(p) for p in st.get("prs") or []]
+    offs = dict(st.get("offsets") or {})
+    prs, arts = [list(p) for p in st.get("prs") or []], [list(a) for a in st.get("arts") or []]
+    calls = dict(st.get("calls") or {})
     files = [transcript] + sorted(glob.glob(os.path.join(os.path.dirname(transcript), session_id, "subagents", "agent-*.jsonl")))
     changed = False
     for path in files:
@@ -282,20 +321,39 @@ def session_prs(session_id, transcript):
         except Exception: continue
         end = chunk.rfind(b"\n") + 1                            # leave a half-written last line for the next tick
         for line in chunk[:end].split(b"\n"):
-            if b'"gitOperation"' not in line: continue
-            try:
-                res = json.loads(line)["toolUseResult"]
-                pr = res["gitOperation"]["pr"]
-                url, num = pr["url"], pr["number"]
-            except Exception: continue
-            # Claude Code tags any command that merely mentions `gh pr create` and prints a PR URL.
-            # gh itself prints the URL alone on a line, so require that.
-            if not re.search(r"(?m)^\s*" + re.escape(url) + r"\s*$", res.get("stdout") or ""): continue
-            prs = [p for p in prs if p[0] != url] + [[url, num]]
+            if b'"gitOperation"' in line:
+                try:
+                    res = json.loads(line)["toolUseResult"]
+                    pr = res["gitOperation"]["pr"]
+                    url, num = pr["url"], pr["number"]
+                except Exception: continue
+                # Claude Code tags any command that merely mentions `gh pr create` and prints a PR URL.
+                # gh itself prints the URL alone on a line, so require that.
+                if not re.search(r"(?m)^\s*" + re.escape(url) + r"\s*$", res.get("stdout") or ""): continue
+                prs = [p for p in prs if p[0] != url] + [[url, num]]
+            elif b'"name":"Artifact"' in line or b"claude.ai/" in line and b'"tool_result"' in line:
+                try: content = json.loads(line)["message"]["content"]
+                except Exception: continue
+                for part in content if isinstance(content, list) else []:
+                    if not isinstance(part, dict): continue
+                    if part.get("type") == "tool_use" and part.get("name") == "Artifact":
+                        inp = part.get("input") or {}
+                        if inp.get("action", "publish") == "publish" and not inp.get("asset"):
+                            calls[part.get("id")] = {k: inp[k] for k in ("title", "file_path") if inp.get(k)}
+                    elif part.get("type") == "tool_result" and part.get("tool_use_id") in calls:
+                        call, text = calls.pop(part["tool_use_id"]), _result_text(part)
+                        gone = _ART_GONE.search(text)
+                        if gone:
+                            arts = [a for a in arts if a[0] != gone.group(1)]
+                            continue
+                        m = _ART_DONE.match(text.strip())
+                        if not m: continue
+                        old = next((a[1] for a in arts if a[0] == m.group("url")), "")
+                        arts = [a for a in arts if a[0] != m.group("url")] + [[m.group("url"), _art_title(call, m.group("file"), old)]]
         if end:
             offs[path] = off + end; changed = True
-    if changed: _cache_put("prscan", session_id, {"offsets": offs, "prs": prs})
-    return prs
+    if changed: _cache_put("outscan", session_id, {"offsets": offs, "prs": prs, "arts": arts, "calls": calls})
+    return prs, arts
 
 def pr_status(url):
     """{state, draft, ci} from the last background fetch ({} until the first one lands)."""
@@ -335,6 +393,10 @@ def pr_fetch(url):
     finally:
         try: os.unlink(_cache_path("pr", url) + ".lock")
         except Exception: pass
+
+def art_link(url, title, cap):
+    t = title if vlen(title) <= cap else next(title[:k] for k in range(len(title), 0, -1) if vlen(title[:k]) <= cap - 1) + "…"
+    return f"\033]8;;{url}\007\033[4m{t}\033[24m\033]8;;\007"   # OSC 8: Cmd+click opens the artifact
 
 def pr_badge(url, num):
     v = pr_status(url); state = v.get("state")
@@ -486,37 +548,48 @@ def main():
 
     title = session_title(d.get("session_id")) if TITLE_LINE >= 0 else ""
     sid = (f"{I_SID} " if RIGHT_ICONS else "sid ") + d["session_id"][:8] if SID_LINE >= 0 and d.get("session_id") else ""
-    prs = []
-    if PR_LINE >= 0:
-        try:
-            prs = session_prs(d.get("session_id"), d.get("transcript_path"))
-            live = d.get("pr") or {}
-            if live.get("url") and all(p[0] != live["url"] for p in prs): prs.append([live["url"], live.get("number")])
-        except Exception: prs = []
+    prs, arts = [], []
+    if PR_LINE >= 0 or ART_LINE >= 0:
+        try: prs, arts = session_outputs(d.get("session_id"), d.get("transcript_path"))
+        except Exception: pass
+        live = d.get("pr") or {}
+        if live.get("url") and all(p[0] != live["url"] for p in prs): prs.append([live["url"], live.get("number")])
     lines = []
     for i, order in enumerate(LINES):
         best = next((s for s in (build_line(order, lv) for lv in range(9)) if vlen(s) <= width), build_line(order, 8))
-        if i == TITLE_LINE and title:
-            avail = width - vlen(best) - 2 - vlen(ric(I_TITLE))  # room left of the right edge, incl. one gap and the icon
-            t = title
-            while t and vlen(t) + 2 + 2 * len(PAD) > avail: t = t[:-1]   # 2 = round caps
-            if t != title and vlen(t) >= 6: t = t[:-1] + "…"
-            if vlen(t) >= 6:
-                pill = render([(C["title_bg"], C["title_fg"], ric(I_TITLE) + t)])
-                best = best + " " * (width - vlen(best) - vlen(pill)) + pill
+        right = []                                              # pills against the right edge, left to right
+        def free():                                             # widest pill that still fits, with its gaps
+            return width - vlen(best) - 1 - (vlen(" ".join(right)) + 1 if right else 0)
         if i == PR_LINE and prs:
             badges = [pr_badge(u, n) for u, n in reversed(prs[-PR_MAX:])]   # newest first
             for k in range(len(badges), 0, -1):                              # drop the oldest until it fits
                 hidden = len(prs) - k
                 pill = render([(C["stat_bg"], C["stat_fg"], f"{fg(C['stat_label'])}{ric(I_PR) or 'PR '}" + " ".join(badges[:k])
                                 + (f" {fg(C['stat_label'])}+{hidden}" if hidden else ""))])
-                if vlen(best) + 1 + vlen(pill) <= width:
-                    best = best + " " * (width - vlen(best) - vlen(pill)) + pill
-                    break
+                if vlen(pill) <= free():
+                    right.append(pill); break
         if i == SID_LINE and sid:
             pill = render([(C["title_bg"], C["stat_label"], sid)])   # quieter than the PR pill; same right edge
-            if vlen(best) + 1 + vlen(pill) <= width:
-                best = best + " " * (width - vlen(best) - vlen(pill)) + pill
+            if vlen(pill) <= free(): right.append(pill)
+        if i == ART_LINE and arts:                               # left of the PR pill: the PR stays when room runs out
+            newest = list(reversed(arts))
+            def art_pill(k, cap):
+                hidden = len(arts) - k
+                return render([(C["stat_bg"], C["stat_fg"], f"{fg(C['stat_label'])}{ric(I_ART) or 'art '}{fg(C['stat_fg'])}"
+                                + f" {fg(C['stat_label'])}·{fg(C['stat_fg'])} ".join(art_link(u, t, cap) for u, t in newest[:k])
+                                + (f" {fg(C['stat_label'])}+{hidden}" if hidden else ""))])
+            # Readable titles first: at each width try every count, then narrow the titles; the newest alone last.
+            tries = [(k, c) for c in range(ART_TITLE_MAX, 9, -2) for k in range(min(ART_MAX, len(arts)), 0, -1)] + [(1, c) for c in range(9, 5, -1)]
+            pill = next((p for p in (art_pill(k, c) for k, c in tries) if vlen(p) <= free()), None)
+            if pill: right.insert(0, pill)
+        if i == TITLE_LINE and title:
+            t = title
+            while t and vlen(render([(C["title_bg"], C["title_fg"], ric(I_TITLE) + t)])) > free(): t = t[:-1]
+            if t != title and vlen(t) >= 6: t = t[:-1] + "…"
+            if vlen(t) >= 6: right.insert(0, render([(C["title_bg"], C["title_fg"], ric(I_TITLE) + t)]))
+        if right:
+            block = " ".join(right)
+            best = best + " " * (width - vlen(best) - vlen(block)) + block
         if best: lines.append(best)
     sys.stdout.write(("\n" + "\u2800\n" * LINE_SPACING).join(lines))   # U+2800: blank but not whitespace, so the line is not trimmed away
 
