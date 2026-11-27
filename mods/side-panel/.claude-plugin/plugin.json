@@ -1,0 +1,7 @@
+{
+  "name": "side-panel",
+  "version": "0.2.0",
+  "description": "/side 로 Claude Code 왼쪽에 세로로 긴 세션 패널을 연다(Ghostty 분할 창): 제목·세션 ID·아티팩트·PR·에이전트·백그라운드 셸",
+  "author": { "name": "gahee42" },
+  "types": "./types/index.d.ts"
+}
