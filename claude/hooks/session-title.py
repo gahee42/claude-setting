@@ -110,7 +110,9 @@ def generate(session_id, transcript_path):
              "--system-prompt", SYSTEM, "--max-turns", "1", "--tools", ""],
             input=excerpt, capture_output=True, text=True, timeout=TIMEOUT,
         )
-        title = out.stdout.strip().splitlines()[0].strip() if out.stdout.strip() else ""
+        # A failed run prints its error to stdout ("Error: Reached max turns (1)"): never a title.
+        ok = out.returncode == 0 and not out.stdout.lstrip().startswith("Error:")
+        title = out.stdout.strip().splitlines()[0].strip() if ok and out.stdout.strip() else ""
     except Exception:
         return
     title = title.strip("\"'“”‘’`*# ").rstrip(".。")
