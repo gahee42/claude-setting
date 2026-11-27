@@ -15,14 +15,25 @@ const CELL = {
   props: { maxColumns: 40, floatRows: 0, floatColumns: 40, isWorking: false, view: {} },
 } as const
 
-test('the short id stands beside the prompt, on terminal and desktop', async ($, on) => {
+test('the short id stands beside the prompt on desktop', async ($, on) => {
   on('session.id', () => ({ value: ID }))
 
-  for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ ...CELL, surface })
-    expect((await ui.find({ type: 'Text', text: /sid/ }))?.text).toBe('sid dc54fc3b')
-    await ui.unmount()
-  }
+  const ui = await $.ui.mount({ ...CELL, surface: 'desktop' })
+  expect((await ui.find({ type: 'Text', text: /sid/ }))?.text).toBe('sid dc54fc3b')
+  await ui.unmount()
+})
+
+test('in the terminal the cell is left to the engine (the status line shows the id)', async ($, on) => {
+  on('session.id', () => ({ value: ID }))
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+
+  const ui = await $.ui.mount({ ...CELL, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /sid/ })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /engine/ }))?.text).toBe('engine')
+  await ui.unmount()
 })
 
 test('with no room the cell is left to the engine', async ($, on) => {
@@ -32,7 +43,7 @@ test('with no room the cell is left to the engine', async ($, on) => {
     return <Text>engine</Text>
   })
 
-  const ui = await $.ui.mount({ ...CELL, surface: 'terminal', props: { ...CELL.props, maxColumns: 4 } })
+  const ui = await $.ui.mount({ ...CELL, surface: 'desktop', props: { ...CELL.props, maxColumns: 4 } })
   expect((await ui.find({ type: 'Text', text: /engine/ }))?.text).toBe('engine')
   await ui.unmount()
 })
