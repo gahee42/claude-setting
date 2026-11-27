@@ -17,6 +17,11 @@
       "name": "session-id",
       "source": "./mods/session-id",
       "description": "입력창 오른쪽에 이 세션 ID를 띄우고 /sid 로 복사한다. 다른 세션 메시지에 붙여 넣으면 그 세션으로 일을 보낼 수 있다"
+    },
+    {
+      "name": "side-panel",
+      "source": "./mods/side-panel",
+      "description": "/side 로 Claude Code 왼쪽에 세로로 긴 세션 패널을 연다(Ghostty 분할 창): 제목·세션 ID·아티팩트·PR·에이전트·백그라운드 셸"
     }
   ]
 }
