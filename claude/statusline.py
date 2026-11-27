@@ -333,6 +333,16 @@ def pr_fetch(url):
         try: os.unlink(_cache_path("pr", url) + ".lock")
         except Exception: pass
 
+def panel(session_id, transcript):
+    """`--panel <session_id> [transcript]`: what the side-panel mod shows, read through the same caches."""
+    try: prs = session_prs(session_id, transcript) if transcript else []
+    except Exception: prs = []
+    out = []
+    for url, num in reversed(prs[-PR_MAX * 2:]):                 # newest first
+        v = pr_status(url)
+        out.append({"url": url, "num": num, "state": v.get("state") or "", "draft": bool(v.get("draft")), "ci": v.get("ci") or ""})
+    sys.stdout.write(json.dumps({"title": session_title(session_id), "prs": out}, ensure_ascii=False))
+
 def pr_badge(url, num):
     v = pr_status(url); state = v.get("state")
     s = f"{fg(C['stat_fg'])}\033[4m#{num}\033[24m"
@@ -518,5 +528,7 @@ def main():
 if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "--pr-fetch":
         pr_fetch(sys.argv[2]); sys.exit(0)
+    if len(sys.argv) >= 3 and sys.argv[1] == "--panel":           # side-panel mod: title and PRs as JSON
+        panel(sys.argv[2], sys.argv[3] if len(sys.argv) >= 4 else ""); sys.exit(0)
     try: main()
     except Exception as e: sys.stdout.write(f"{fg(160)}statusline error: {e}{R}")
