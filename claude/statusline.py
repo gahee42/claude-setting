@@ -42,6 +42,7 @@ PR_TTL_OPEN = 60          # seconds between background `gh pr view` refreshes of
 PR_TTL_DONE = 3600        # merged / closed PRs rarely change
 PR_MAX      = 3           # newest PRs shown; older ones collapse into "+N"
 SID_LINE    = 2           # line index that shows "sid <first 8 of the session id>" right-aligned, dim (-1 = off)
+RIGHT_ICONS = True        # Nerd Font icon on the right-hand pills (title, PR, sid) even when ICONS is off
 WIDTH_MARGIN = 4          # columns kept free at the right edge (Claude Code indents the status line and
                           # ellipsizes anything that overflows, so leave it room)
 DIR_MODE    = "repo"      # "repo" = repository name (from origin; worktree-safe) | "path" = working directory
@@ -53,12 +54,14 @@ SMALL_CAPS  = False       # render labels (ctx, diff, time, cost, usage, 5h, 7d,
 _SC = str.maketrans("abcdefghijklmnopqrstuvwxyz", "\u1d00\u0299\u1d04\u1d05\u1d07\ua730\u0262\u029c\u026a\u1d0a\u1d0b\u029f\u1d0d\u0274\u1d0f\u1d18\u01eb\u0280s\u1d1b\u1d1c\u1d20\u1d21x\u028f\u1d22")
 def sc(t): return t.lower().translate(_SC) if SMALL_CAPS else t
 def ic(i): return f"{i} " if ICONS else ""
+def ric(i): return f"{i} " if ICONS or RIGHT_ICONS else ""   # the right-hand pills' icon
 
 # ---------- Nerd Font glyphs (escaped so they survive copy/paste) ----------
 I_MODEL, I_BRANCH, I_DIR, I_CTX = "\uf0e7", "\ue0a0", "\uf07b", "\uf2db"        # bolt, branch, folder, chip
 I_5H, I_7D, I_SCOPED, I_COST   = "\uf252", "\uf073", "\uf005", "\uf155"         # hourglass, calendar, star, $
 I_TIME, I_DIFF, I_VER, I_RESET  = "\uf017", "\uf044", "\uf02b", "\uf021"         # clock, pencil, tag, refresh
 I_AGENT, I_USAGE = "\uf17b", "\uf0e4"   # android, gauge
+I_TITLE, I_PR, I_SID = "\uf075", "\uf407", "\uf2c1"   # comment, git-pull-request, id-badge (right-hand pills)
 L_CAP, R_CAP, ARROW, THIN = "\ue0b6", "\ue0b4", "\ue0b0", "\ue0b1"               # ( ) ▶ ›
 I_STAGED, I_MOD, I_UNTR, I_CONF, I_AHEAD, I_BEHIND = "+", "!", "?", "~", "⇡", "⇣"
 
@@ -482,7 +485,7 @@ def main():
         return render(segs)
 
     title = session_title(d.get("session_id")) if TITLE_LINE >= 0 else ""
-    sid = f"sid {d['session_id'][:8]}" if SID_LINE >= 0 and d.get("session_id") else ""
+    sid = (f"{I_SID} " if RIGHT_ICONS else "sid ") + d["session_id"][:8] if SID_LINE >= 0 and d.get("session_id") else ""
     prs = []
     if PR_LINE >= 0:
         try:
@@ -494,24 +497,26 @@ def main():
     for i, order in enumerate(LINES):
         best = next((s for s in (build_line(order, lv) for lv in range(9)) if vlen(s) <= width), build_line(order, 8))
         if i == TITLE_LINE and title:
-            avail = width - vlen(best) - 2                      # room left of the right edge, incl. one gap
+            avail = width - vlen(best) - 2 - vlen(ric(I_TITLE))  # room left of the right edge, incl. one gap and the icon
             t = title
             while t and vlen(t) + 2 + 2 * len(PAD) > avail: t = t[:-1]   # 2 = round caps
             if t != title and vlen(t) >= 6: t = t[:-1] + "…"
             if vlen(t) >= 6:
-                pill = render([(C["title_bg"], C["title_fg"], t)])
+                pill = render([(C["title_bg"], C["title_fg"], ric(I_TITLE) + t)])
                 best = best + " " * (width - vlen(best) - vlen(pill)) + pill
         if i == PR_LINE and prs:
             badges = [pr_badge(u, n) for u, n in reversed(prs[-PR_MAX:])]   # newest first
             for k in range(len(badges), 0, -1):                              # drop the oldest until it fits
                 hidden = len(prs) - k
-                pill = render([(C["stat_bg"], C["stat_fg"], f"{fg(C['stat_label'])}PR " + " ".join(badges[:k])
+                pill = render([(C["stat_bg"], C["stat_fg"], f"{fg(C['stat_label'])}{ric(I_PR) or 'PR '}" + " ".join(badges[:k])
                                 + (f" {fg(C['stat_label'])}+{hidden}" if hidden else ""))])
                 if vlen(best) + 1 + vlen(pill) <= width:
                     best = best + " " * (width - vlen(best) - vlen(pill)) + pill
                     break
-        if i == SID_LINE and sid and vlen(best) + 1 + len(sid) <= width:
-            best = best + " " * (width - vlen(best) - len(sid)) + f"{fg(C['dim'])}{sid}{R}"
+        if i == SID_LINE and sid:
+            pill = render([(C["title_bg"], C["stat_label"], sid)])   # quieter than the PR pill; same right edge
+            if vlen(best) + 1 + vlen(pill) <= width:
+                best = best + " " * (width - vlen(best) - vlen(pill)) + pill
         if best: lines.append(best)
     sys.stdout.write(("\n" + "\u2800\n" * LINE_SPACING).join(lines))   # U+2800: blank but not whitespace, so the line is not trimmed away
 
