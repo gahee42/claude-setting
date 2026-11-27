@@ -41,6 +41,7 @@ PR_LINE     = 1           # line index that shows this session's PRs right-align
 PR_TTL_OPEN = 60          # seconds between background `gh pr view` refreshes of an open PR (state · CI)
 PR_TTL_DONE = 3600        # merged / closed PRs rarely change
 PR_MAX      = 3           # newest PRs shown; older ones collapse into "+N"
+SID_LINE    = 2           # line index that shows "sid <first 8 of the session id>" right-aligned, dim (-1 = off)
 WIDTH_MARGIN = 4          # columns kept free at the right edge (Claude Code indents the status line and
                           # ellipsizes anything that overflows, so leave it room)
 DIR_MODE    = "repo"      # "repo" = repository name (from origin; worktree-safe) | "path" = working directory
@@ -481,6 +482,7 @@ def main():
         return render(segs)
 
     title = session_title(d.get("session_id")) if TITLE_LINE >= 0 else ""
+    sid = f"sid {d['session_id'][:8]}" if SID_LINE >= 0 and d.get("session_id") else ""
     prs = []
     if PR_LINE >= 0:
         try:
@@ -508,6 +510,8 @@ def main():
                 if vlen(best) + 1 + vlen(pill) <= width:
                     best = best + " " * (width - vlen(best) - vlen(pill)) + pill
                     break
+        if i == SID_LINE and sid and vlen(best) + 1 + len(sid) <= width:
+            best = best + " " * (width - vlen(best) - len(sid)) + f"{fg(C['dim'])}{sid}{R}"
         if best: lines.append(best)
     sys.stdout.write(("\n" + "\u2800\n" * LINE_SPACING).join(lines))   # U+2800: blank but not whitespace, so the line is not trimmed away
 
